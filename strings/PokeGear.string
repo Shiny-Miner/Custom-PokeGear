@@ -111,3 +111,21 @@ B: Back
 
 #org @gText_PhoneCard_Idle
 Press A to call.
+
+#org @gText_PhoneMsg_Oak_Champion
+You did it, champ!\nI'm so proud of you.
+
+#org @gText_PhoneMsg_Brock_Beaten
+Beating me was just the\nstart. Keep going!
+
+#org @gText_PhoneMsg_Brock_Badges
+Eight badges! You're\nready for the League!
+
+#org @gText_PhoneCard_NoReply
+Nobody picked up.
+
+#org @gText_PhoneCard_NoContacts
+No contacts yet.
+
+#org @gText_PhoneCard_NoContactsBox
+Register someone first!

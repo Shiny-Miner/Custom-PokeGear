@@ -54,6 +54,7 @@ enum WindowIds
 };   
 
 
+#define PHONECARD_MAX_CONTACTS 64 // size of sPhoneContacts[] must not exceed this
 struct PokegearResources
 {
   u8 cursorpos[2];
@@ -71,6 +72,8 @@ struct PokegearResources
   u8 phonePortraitSpriteId;
   u16 phonePortraitIdx;
   struct SpriteTemplate phonePortraitTemplate; // the game keeps a pointer to it while the sprite exists
+  u8 phoneVisibleCount;                        // how many contacts are registered right now
+  u8 phoneVisible[PHONECARD_MAX_CONTACTS];     // list position -> index into sPhoneContacts
 };   
 
 #define sPokegearPtr (*((struct PokegearResources**) 0x203E038))  
@@ -658,59 +661,19 @@ static void CreateScrollbar(void)
 
 }
 
-extern const u8 gText_NPCName1[];
-extern const u8 gText_NPCName2[];
-extern const u8 gText_NPCName3[];
-extern const u8 gText_NPCName4[];
-extern const u8 gText_NPCName5[];
-extern const u8 gText_NPCName6[];
-extern const u8 gText_NPCName7[];
-extern const u8 gText_NPCName8[];
-extern const u8 gText_NPCRole1[];
-extern const u8 gText_NPCRole2[];
-extern const u8 gText_NPCRole3[];
-extern const u8 gText_NPCRole4[];
-extern const u8 gText_NPCRole5[];
-extern const u8 gText_NPCRole6[];
-extern const u8 gText_NPCRole7[];
-extern const u8 gText_NPCRole8[];
-extern const u8 gText_NPCMsg1[];
-extern const u8 gText_NPCMsg2[];
-extern const u8 gText_NPCMsg3[];
-extern const u8 gText_NPCMsg4[];
-extern const u8 gText_NPCMsg5[];
-extern const u8 gText_NPCMsg6[];
-extern const u8 gText_NPCMsg7[];
-extern const u8 gText_NPCMsg8[];
 extern const u8 gText_PhoneCard_HintList[];
 extern const u8 gText_PhoneCard_Idle[];
+extern const u8 gText_PhoneCard_NoReply[];
+extern const u8 gText_PhoneCard_NoContacts[];
+extern const u8 gText_PhoneCard_NoContactsBox[];
 
-// Each contact points into the game's overworld sprite table (graphicsId).
-// Use any index from your table - vanilla ids come from constants/event_objects.h,
-// custom entries are just the index you added to the table.
-// To add a contact: add gText_NPCNameN / gText_NPCRoleN / gText_NPCMsgN to PokeGear.string,
-// declare them above and add a line here.
-struct PhoneContact
-{
-    const u8* name;
-    const u8* role;     // second column of the list ("Leader", "Professor", ...)
-    const u8* message;
-    u16 graphicsId;
-};
+// The contact table (names, portraits, registered flags, messages by flag) lives in its own file
+#include "PhoneContacts.h"
 
-static const struct PhoneContact sPhoneContacts[] =
-{
-    { gText_NPCName1, gText_NPCRole1, gText_NPCMsg1, OBJ_EVENT_GFX_MOM },
-    { gText_NPCName2, gText_NPCRole2, gText_NPCMsg2, OBJ_EVENT_GFX_PROF_OAK },
-    { gText_NPCName3, gText_NPCRole3, gText_NPCMsg3, OBJ_EVENT_GFX_DAISY },
-    { gText_NPCName4, gText_NPCRole4, gText_NPCMsg4, OBJ_EVENT_GFX_BILL },
-    { gText_NPCName5, gText_NPCRole5, gText_NPCMsg5, OBJ_EVENT_GFX_BROCK },
-    { gText_NPCName6, gText_NPCRole6, gText_NPCMsg6, OBJ_EVENT_GFX_MISTY },
-    { gText_NPCName7, gText_NPCRole7, gText_NPCMsg7, OBJ_EVENT_GFX_LT_SURGE },
-    { gText_NPCName8, gText_NPCRole8, gText_NPCMsg8, OBJ_EVENT_GFX_ERIKA },
-};
+_Static_assert(ARRAY_COUNT(sPhoneContacts) <= PHONECARD_MAX_CONTACTS, "too many phone contacts");
 
-#define PHONECARD_ENTRY_COUNT ((int)ARRAY_COUNT(sPhoneContacts))
+// Number of contacts that are currently registered (the list the player sees)
+#define PHONECARD_ENTRY_COUNT ((int)sPokegearPtr->phoneVisibleCount)
 
 // 1 = portrait comes from the overworld sprite table, 0 = no portrait (handy to bisect a crash)
 #define PHONECARD_OW_PORTRAIT  1
@@ -972,6 +935,43 @@ static void CreatePhoneCardPortrait(u16 graphicsId)
 #endif
 }
 
+static bool8 PhoneFlagCheck(u16 flag)
+{
+    if (flag == PHONE_ALWAYS)
+        return TRUE;
+    if (flag == PHONE_NEVER)
+        return FALSE;
+    return FlagGet(flag);
+}
+
+// Which contacts are registered? (checked each time the phone card opens)
+static void BuildPhoneVisibleList(void)
+{
+    sPokegearPtr->phoneVisibleCount = 0;
+    for (u32 i = 0; i < ARRAY_COUNT(sPhoneContacts); ++i)
+    {
+        if (PhoneFlagCheck(sPhoneContacts[i].registeredFlag))
+            sPokegearPtr->phoneVisible[sPokegearPtr->phoneVisibleCount++] = i;
+    }
+}
+
+// contact at a given position of the visible list
+static const struct PhoneContact* PhoneContactAt(u16 listPos)
+{
+    return &sPhoneContacts[sPokegearPtr->phoneVisible[listPos]];
+}
+
+// first message (top to bottom) whose flag is set
+static const u8* GetPhoneMessage(const struct PhoneContact* contact)
+{
+    for (u8 i = 0; i < contact->messageCount; ++i)
+    {
+        if (PhoneFlagCheck(contact->messages[i].flag))
+            return contact->messages[i].text;
+    }
+    return gText_PhoneCard_NoReply;
+}
+
 static void InitPhoneCardGUI(void)
 {
     sPhoneCardScroll = 0;
@@ -979,6 +979,7 @@ static void InitPhoneCardGUI(void)
     sPhoneCardMsgActive = FALSE;
     sPhoneCardPortraitSpriteId = MAX_SPRITES;
     sPhoneCardPortraitIdx = 0xFFFF;
+    BuildPhoneVisibleList();
 
     for (u8 i = 0; i < WIN_PH_COUNT; ++i)
     {
@@ -987,9 +988,9 @@ static void InitPhoneCardGUI(void)
     }
 
     // "more above / more below" arrows, drawn on the two buttons on the right
-    LoadSpriteSheet(&(struct SpriteSheet){arrow_upTiles, 0x20, GFXTAG_ARROW_UP});
+    LoadSpriteSheet(&(struct SpriteSheet){arrow_upTiles, 16 * 16 / 2, GFXTAG_ARROW_UP});
     LoadSpritePalette(&(struct SpritePalette){arrow_upPal, GFXTAG_ARROW_UP});
-    LoadSpriteSheet(&(struct SpriteSheet){arrow_downTiles, 0x20, GFXTAG_ARROW_DOWN});
+    LoadSpriteSheet(&(struct SpriteSheet){arrow_downTiles, 16 * 16 / 2, GFXTAG_ARROW_DOWN});
     LoadSpritePalette(&(struct SpritePalette){arrow_downPal, GFXTAG_ARROW_DOWN});
     sPokegearPtr->ArrowSpriteIds[0] = CreateSprite(&sSpriteTemplate_ArrowUp, PHONECARD_ARROW_X, PHONECARD_ARROW_UP_Y, 0);
     sPokegearPtr->ArrowSpriteIds[1] = CreateSprite(&sSpriteTemplate_ArrowDown, PHONECARD_ARROW_X, PHONECARD_ARROW_DOWN_Y, 0);
@@ -1008,14 +1009,21 @@ static void InitPhoneCardGUI(void)
 // Top box: contact name on the strip, and either the "press A" hint or the message
 static void PrintPhoneBox(bool8 showMessage)
 {
-    u16 selected = sPhoneCardScroll + sPhoneCardCursor;
-
     CleanWindow(WIN_PH_BOX);
-    WindowPrint(WIN_PH_BOX, 1, PHONECARD_BOX_X, PHONECARD_BOX_NAME_Y, &sWhiteText, 0, sPhoneContacts[selected].name);
-    if (showMessage)
-        WindowPrint(WIN_PH_BOX, 1, PHONECARD_BOX_X, PHONECARD_BOX_MSG_Y, &sWhiteText, PHONECARD_TEXT_SPEED, sPhoneContacts[selected].message);
+    if (PHONECARD_ENTRY_COUNT == 0)
+    {
+        WindowPrint(WIN_PH_BOX, 1, PHONECARD_BOX_X, PHONECARD_BOX_MSG_Y, &sPhoneRoleText, 0, gText_PhoneCard_NoContactsBox);
+    }
     else
-        WindowPrint(WIN_PH_BOX, 1, PHONECARD_BOX_X, PHONECARD_BOX_MSG_Y, &sPhoneRoleText, 0, gText_PhoneCard_Idle);
+    {
+        const struct PhoneContact* contact = PhoneContactAt(sPhoneCardScroll + sPhoneCardCursor);
+
+        WindowPrint(WIN_PH_BOX, 1, PHONECARD_BOX_X, PHONECARD_BOX_NAME_Y, &sWhiteText, 0, contact->name);
+        if (showMessage)
+            WindowPrint(WIN_PH_BOX, 1, PHONECARD_BOX_X, PHONECARD_BOX_MSG_Y, &sWhiteText, PHONECARD_TEXT_SPEED, GetPhoneMessage(contact));
+        else
+            WindowPrint(WIN_PH_BOX, 1, PHONECARD_BOX_X, PHONECARD_BOX_MSG_Y, &sPhoneRoleText, 0, gText_PhoneCard_Idle);
+    }
     CommitWindow(WIN_PH_BOX);
 }
 
@@ -1025,23 +1033,39 @@ static void PrintPhoneCardUI(void)
 
     CleanWindow(WIN_PH_LIST);
 
+    if (PHONECARD_ENTRY_COUNT == 0)
+    {
+        // nobody registered yet
+        WindowPrint(WIN_PH_LIST, 1, PHONECARD_NAME_X, 0, &sPhoneRoleText, 0, gText_PhoneCard_NoContacts);
+        CommitWindow(WIN_PH_LIST);
+        PrintPhoneBox(FALSE);
+        DestroyPhoneCardPortrait();
+        sPhoneCardPortraitIdx = 0xFFFF;
+        gSprites[sPokegearPtr->ArrowSpriteIds[0]].invisible = TRUE;
+        gSprites[sPokegearPtr->ArrowSpriteIds[1]].invisible = TRUE;
+        return;
+    }
+
     for (u8 i = 0; i < PHONECARD_MAX_VISIBLE; ++i)
     {
         u16 idx = sPhoneCardScroll + i;
         u8 y = PHONECARD_ROW_HEIGHT * i;
+        const struct PhoneContact* contact;
+
         if (idx >= PHONECARD_ENTRY_COUNT)
             break;
+        contact = PhoneContactAt(idx);
         if (i == sPhoneCardCursor)
         {
             // cursor arrow + highlighted (red) name
             WindowPrint(WIN_PH_LIST, 1, PHONECARD_CURSOR_X, y, &sPhoneSelText, 0, sText_PhoneCursor);
-            WindowPrint(WIN_PH_LIST, 1, PHONECARD_NAME_X, y, &sPhoneSelText, 0, sPhoneContacts[idx].name);
+            WindowPrint(WIN_PH_LIST, 1, PHONECARD_NAME_X, y, &sPhoneSelText, 0, contact->name);
         }
         else
         {
-            WindowPrint(WIN_PH_LIST, 1, PHONECARD_NAME_X, y, &sWhiteText, 0, sPhoneContacts[idx].name);
+            WindowPrint(WIN_PH_LIST, 1, PHONECARD_NAME_X, y, &sWhiteText, 0, contact->name);
         }
-        WindowPrint(WIN_PH_LIST, 1, PHONECARD_ROLE_X, y, &sPhoneRoleText, 0, sPhoneContacts[idx].role);
+        WindowPrint(WIN_PH_LIST, 1, PHONECARD_ROLE_X, y, &sPhoneRoleText, 0, contact->role);
     }
     CommitWindow(WIN_PH_LIST);
 
@@ -1057,7 +1081,7 @@ static void PrintPhoneCardUI(void)
     if (selected != sPhoneCardPortraitIdx)
     {
         sPhoneCardPortraitIdx = selected;
-        CreatePhoneCardPortrait(sPhoneContacts[selected].graphicsId);
+        CreatePhoneCardPortrait(PhoneContactAt(selected)->graphicsId);
     }
 }
 
@@ -1090,6 +1114,10 @@ static void Task_PhoneCardInputHandler(u8 taskId)
         PlaySE(SE_PC_OFF);
         BeginNormalPaletteFade(0xFFFFFFFF, 0, 0, 16, RGB_BLACK);
         gTasks[taskId].func = Task_PhoneCardFadeOutToPokegear;
+    }
+    else if (PHONECARD_ENTRY_COUNT == 0)
+    {
+        return; // nothing registered: only B does anything
     }
     else if (JOY_NEW(DPAD_UP))
     {

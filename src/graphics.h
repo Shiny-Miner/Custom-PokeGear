@@ -197,8 +197,8 @@ static const struct SpriteTemplate ScrollBarSpriteTemplate =
 };
 static const struct OamData sArrowOam =
 {
-    .shape = SPRITE_SHAPE(8x8),
-    .size = SPRITE_SIZE(8x8),
+    .shape = SPRITE_SHAPE(16x16),   // arrow_up.png / arrow_down.png are 16x16
+    .size = SPRITE_SIZE(16x16),
     .priority = 0,
 };
 
