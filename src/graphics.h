@@ -49,6 +49,14 @@ extern const u8 arrow_downTiles[];
 extern const u16 arrow_downPal[];
 #define GFXTAG_ARROW_DOWN 0x7F11
 
+// arrow (phone card cursor)
+extern const u8 arrowTiles[];
+extern const u16 arrowPal[];
+#define GFXTAG_PHONE_CURSOR   0x7F12
+
+// phone card portrait (tiles come from the overworld sprite table)
+#define GFXTAG_PHONE_PORTRAIT 0x7F13
+
 
 
 //================================================================================================

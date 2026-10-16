@@ -36,12 +36,78 @@ PM
 
 #org @gText_NPCName1
 Mom
+
 #org @gText_NPCName2
 Professor Oak
 
+#org @gText_NPCName3
+Daisy
+
+#org @gText_NPCName4
+Bill
+
+#org @gText_NPCName5
+Brock
+
+#org @gText_NPCName6
+Misty
+
+#org @gText_NPCName7
+Lt. Surge
+
+#org @gText_NPCName8
+Erika
+
 #org @gText_NPCMsg1
-Remember to save your game often!
+Remember to save\nyour game often!
 
 #org @gText_NPCMsg2
-Come see me if you find anything strange.
+Come see me if you\nfind anything strange.
 
+#org @gText_NPCMsg3
+Come by the lab! I'll\ngroom your Pokemon.
+
+#org @gText_NPCMsg4
+My Storage System is\nrunning smoothly!
+
+#org @gText_NPCMsg5
+Rock-solid training\nbuilds strong bonds.
+
+#org @gText_NPCMsg6
+Don't be a stranger!\nMy Pokemon miss you.
+
+#org @gText_NPCMsg7
+Hey kid, keep your\nPokemon electrified!
+
+#org @gText_NPCMsg8
+Come visit the garden.\nTea will be waiting.
+
+#org @gText_NPCRole1
+Family
+
+#org @gText_NPCRole2
+Professor
+
+#org @gText_NPCRole3
+Groomer
+
+#org @gText_NPCRole4
+Researcher
+
+#org @gText_NPCRole5
+Leader
+
+#org @gText_NPCRole6
+Leader
+
+#org @gText_NPCRole7
+Leader
+
+#org @gText_NPCRole8
+Leader
+
+#org @gText_PhoneCard_HintList
+B: Back
+
+#org @gText_PhoneCard_Idle
+Press A to call.

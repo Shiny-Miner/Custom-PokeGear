@@ -14,6 +14,10 @@
 #define VSPACING 6
 #define icon_template(gfxtag) {.tileTag = (u16) gfxtag, .paletteTag = (u16) gfxtag, .oam = &sIconOamData, .anims = sAnimCmdTable_Icon, .images = NULL,.affineAnims = gDummySpriteAffineAnimTable, .callback = PokegearIconCallback}
 
+// Overworld sprite table access (symbols come from BPRE.ld)
+extern const struct EventObjectGraphicsInfo* GetEventObjectGraphicsInfoOriginal(u16 graphicsId);
+extern void MakeObjectTemplateFromEventObjectGraphicsInfo(u16 graphicsId, void (*callback)(struct Sprite *), struct SpriteTemplate *spriteTemplate, const struct SubspriteTable **subspriteTables);
+extern void PatchObjectPalette(u16 paletteTag, u8 paletteSlot);
 extern u8* GetMapName(u8* dest, u16 regionMapId, u16 padLength);
 extern u8  GetCurrentRegionMapSectionId(void); 
 void CB2_ReturnToField(void);
