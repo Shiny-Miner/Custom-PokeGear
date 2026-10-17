@@ -36,6 +36,7 @@ enum PokegearOptions
 {
   Pokegear_MAPCARD = 0,
   Pokegear_PHONECARD,
+  Pokegear_RADIOCARD,
 };
 
 struct PokegearIcon
@@ -57,6 +58,8 @@ struct PokegearOption
 // Text
 extern const u8 gText_Pokegear_MapCard[];
 extern const u8 gText_Pokegear_PhoneCard[];
+extern const u8 gText_Pokegear_RadioCard[];
+extern void m4aSongNumStop(u16 n);
 
 //Time strings
 extern const u8 gText_Sun[];
@@ -126,6 +129,12 @@ static struct PokegearIcon PokegearIconTable[] =
     .spritesheet = {phonecardTiles, 32*32, GFXTAG_PHONECARD},
     .spritepalette =  {phonecardPal, GFXTAG_PHONECARD},
     .sprtemplate = icon_template(GFXTAG_PHONECARD)
+  },
+  [Pokegear_RADIOCARD] = 
+  {
+    .spritesheet = {radiocardTiles, 32*32, GFXTAG_RADIOCARD},
+    .spritepalette =  {radiocardPal, GFXTAG_RADIOCARD},
+    .sprtemplate = icon_template(GFXTAG_RADIOCARD)
   },
 };
 

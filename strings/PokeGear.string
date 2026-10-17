@@ -4,6 +4,9 @@ Map Card
 #org @gText_Pokegear_PhoneCard
 Phone Card
 
+#org @gText_Pokegear_RadioCard
+Radio Card
+
 #org @gText_Mon
 MON.
 
@@ -129,3 +132,93 @@ No contacts yet.
 
 #org @gText_PhoneCard_NoContactsBox
 Register someone first!
+
+#org @gText_Radio_FM
+FM
+
+#org @gText_Radio_MHz
+MHz
+
+#org @gText_Radio_OnAir
+ON AIR
+
+#org @gText_Radio_StatusStatic
+STATIC
+
+#org @gText_Radio_StatusOff
+OFF
+
+#org @gText_Radio_StripStatic
+No signal
+
+#org @gText_Radio_StripOff
+Radio off
+
+#org @gText_Radio_BodyStatic
+Zzzzt... Zzzzt...\nTune to a station!
+
+#org @gText_Radio_BodyOff
+The radio is off.\nPress A to turn it on.
+
+#org @gText_Radio_NoProgram
+...
+
+#org @gText_Radio_Hint
+A: On/Off   L/R: Station   B: Back
+
+#org @gText_Radio_Scale90
+90
+
+#org @gText_Radio_Scale95
+95
+
+#org @gText_Radio_Scale100
+100
+
+#org @gText_Radio_Scale105
+105
+
+#org @gText_RadioName1
+Pokemon Talk
+
+#org @gText_RadioName2
+Pokemon Music
+
+#org @gText_RadioName3
+Poke Flute
+
+#org @gText_RadioName4
+Lucky Channel
+
+#org @gText_RadioTalk1
+Welcome to Pokemon Talk!\nI'm your host today.
+
+#org @gText_RadioTalk2
+Trainers keep asking me\nabout rare Pokemon.
+
+#org @gText_RadioTalk3
+Tip: a Pokemon holding an\nitem may surprise you!
+
+#org @gText_RadioTalk4
+Rumor has it a new Gym\nLeader is making news!
+
+#org @gText_RadioMusic1
+Here's a lively march\nto brighten your day!
+
+#org @gText_RadioMusic2
+Request line is open!\nSend in your favorites.
+
+#org @gText_RadioMusic3
+Congrats, Champion!\nThis one's for you!
+
+#org @gText_RadioFlute1
+Time to wake up, sleepy\nPokemon! Listen up!
+
+#org @gText_RadioFlute2
+Soothing flute tunes for\nyour long journey.
+
+#org @gText_RadioLucky1
+It's the Lucky Channel!\nCheck your ID numbers!
+
+#org @gText_RadioLucky2
+Tonight's special guest\nis a mystery trainer!

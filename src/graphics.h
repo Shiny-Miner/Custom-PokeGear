@@ -10,6 +10,7 @@ enum GfxTags
   GFXTAG_SCROLLBAR,
   GFXTAG_ARROW_UP,
   GFXTAG_ARROW_DOWN,
+  GFXTAG_RADIOCARD,
 };
 
 
@@ -53,6 +54,19 @@ extern const u16 arrow_downPal[];
 extern const u8 arrowTiles[];
 extern const u16 arrowPal[];
 #define GFXTAG_PHONE_CURSOR   0x7F12
+
+// Radio card
+extern const u8 radiocardTiles[];
+extern const u16 radiocardPal[];
+extern const u8 RadioCardBgTiles[];
+extern const u16 RadioCardBgPal[];
+extern const u8 RadioCardBgMap[];
+extern const u8 radio_needleTiles[];
+extern const u16 radio_needlePal[];
+#define GFXTAG_RADIO_NEEDLE   0x7F14
+extern const u8 radio_markerTiles[];
+extern const u16 radio_markerPal[];
+#define GFXTAG_RADIO_MARKER   0x7F15
 
 // phone card portrait (tiles come from the overworld sprite table)
 #define GFXTAG_PHONE_PORTRAIT 0x7F13
