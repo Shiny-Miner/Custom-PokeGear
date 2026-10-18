@@ -26,7 +26,6 @@ build is same as CFRU. If you don't know how, then checkout how, idc.
 • RadioStations.h: station table.
 • strings/PokeGear.string: all text.
 • graphics/: PokegearBg.png and the sprites (pg_map, pg_radio, pg_phone, pg_exit, pg_glow, pg_pip).
-Old files you can delete: panel, scrollbar, TownMap, phonecard, radiocard, exit, arrow and Sprite1–3 PNGs. Keep arrow_up.png and arrow_down.png.
 
 ## 3. Main settings (PokegearSkins.h)
 
@@ -40,7 +39,7 @@ Old files you can delete: panel, scrollbar, TownMap, phonecard, radiocard, exit,
 Each contact has a name, role, portrait (OBJ_EVENT_GFX_*), a registered flag and a message list.
 • A contact is listed once its registered flag is set. The FLAG_PHONE_* entries are placeholders set to PHONE_ALWAYS. Replace them with your own unused flags and use setflag in a script to register someone.
 • Messages are checked top to bottom and the first set flag wins. Put the most advanced state first and end with PHONE_ALWAYS.
-• Maximum 64 contacts. Messages fit 2 lines of about 24 characters.
+• Maximum 255 (above untested) contacts. Messages fit 2 lines of about 24 characters.
 
 ## 5. Radio stations (RadioStations.h)
 
