@@ -33,26 +33,25 @@
 #include "../include/gba/types.h"
 #include "../include/new/Vanilla_functions.h"
 
-#define MAX_Pokegear_ITEMS 3
-#define cpos sPokegearPtr->cursorpos[0]
-#define scrolloffset sPokegearPtr->cursorpos[1]
-#define numitems sPokegearPtr->NumPokegearItems[0]
-#define numonscreenitems sPokegearPtr->NumPokegearItems[1]
-#define menuitems sPokegearPtr->CurrentOptionsTable[0] 
-#define onscreenmenuitems sPokegearPtr->CurrentOptionsTable[1]
+#include "PokegearSkins.h"
+#include "PokegearUI.h"
+
+#define cpos sPokegearPtr->cursorpos[0]   // selected option (0..3)
 extern void QuestLog_CutRecording(void);
 extern void InitRegionMapWithExitCB(u8 type, void (*callback)(void));
 
 
 enum WindowIds
 {
-    WIN_TOPBAR_TIME,
-    WIN_TOPBAR,
-    WIN_ITEMS,
-    WIN_BOTTOMBAR,
+    WIN_BANNER,     // text on the banner plate: clock + name of the selected option
+    WIN_HINT,       // "L/R: Design" next to the design dots
     WIN_COUNT
-};   
+};
 
+// banner plate in PokegearBg.png: x 68..177, y 36..66
+#define PG_BANNER_W   104   // window width in pixels (13 tiles)
+#define PG_BANNER_Y1  6     // clock line, relative to the window (window starts at y = 32)
+#define PG_BANNER_Y2  19    // option name line
 
 #define PHONECARD_MAX_CONTACTS 64 // size of sPhoneContacts[] must not exceed this
 #define RADIO_MAX_STATIONS 16     // size of sRadioStations[] must not exceed this
@@ -61,10 +60,21 @@ struct PokegearResources
 {
   u8 cursorpos[2];
   u8* sBgTilemapBuffer;
-  u8 NumPokegearItems[2];
-  u8 CurrentOptionsTable[2][MAX_Pokegear_ITEMS]; 
-  u8 IconSpriteIds[6];
   u8 ArrowSpriteIds[2];
+
+  // Main screen state (RAM - see the note below about statics)
+  u8 pgDesign;                  // design whose colours are shown (while fading: the one we left)
+  u8 pgTarget;                  // chosen design
+  u8 pgFadeStep;                // 0 = no colour fade running
+  u8 pgFromCard;                // returned from a card: keep the design that was chosen
+  u8 pgUnlocked;                // bit i set = option i can be selected
+  u8 pgLastMinute;              // banner is redrawn when this or the cursor changes
+  u8 pgLastCursor;
+  u8 pgGlow;                    // sprite ids
+  u8 pgIcon[POKEGEAR_NUM_OPTIONS];
+  u8 pgDot[POKEGEAR_NUM_DESIGNS];
+  u16 pgFromPal[16];            // colours at the start of the fade
+  u16 pgCurPal[16];             // colours on screen
 
   // Phone card state. Must live here (RAM): linker.ld puts every global/static
   // in ROM, so a writable "static" variable can never change.
@@ -97,48 +107,28 @@ struct PokegearResources
 #define sPokegearPtr (*((struct PokegearResources**) 0x203E038))  
 
 extern u16 StdTextPal[];
-static const struct WindowTemplate sMenuWindowTemplates[] = 
+static const struct WindowTemplate sPokegearWindowTemplates[] = 
 {
-    [WIN_TOPBAR_TIME] = 
+    [WIN_BANNER] = 
     {
-        .bg = BG_TEXT,      // which bg to print text on
-        .tilemapLeft = 18,   // position from left (per 8 pixels)
-        .tilemapTop = 0,    // position from top (per 8 pixels)
-        .width = 10,        // width (per 8 pixels)
-        .height = 4,        // height (per 8 pixels)
-        .paletteNum = 14,   // palette index to use for text
-        .baseBlock = 1,     // tile start in VRAM
-    }, 
-    [WIN_TOPBAR] = 
+        .bg = BG_TEXT,
+        .tilemapLeft = 9,   // x = 72
+        .tilemapTop = 4,    // y = 32
+        .width = 13,
+        .height = 5,
+        .paletteNum = 14,
+        .baseBlock = 1,     // 65 tiles
+    },
+    [WIN_HINT] = 
     {
-        .bg = BG_TEXT,      // which bg to print text on
-        .tilemapLeft = 10,   // position from left (per 8 pixels)
-        .tilemapTop = 0,    // position from top (per 8 pixels)
-        .width = 20,        // width (per 8 pixels)
-        .height = 4,        // height (per 8 pixels)
-        .paletteNum = 14,   // palette index to use for text
-        .baseBlock = 42,     // tile start in VRAM
-    },                
-    [WIN_ITEMS] = 
-    {
-        .bg = BG_TEXT,      // which bg to print text on
-        .tilemapLeft = 0,   // position from left (per 8 pixels)
-        .tilemapTop = 4,    // position from top (per 8 pixels)
-        .width = 30,        // width (per 8 pixels)
-        .height = 12,        // height (per 8 pixels)
-        .paletteNum = 14,   // palette index to use for text
-        .baseBlock = 123,     // tile start in VRAM
-    },            
-    [WIN_BOTTOMBAR] = 
-    {
-        .bg = BG_TEXT,      // which bg to print text on
-        .tilemapLeft = 0,   // position from left (per 8 pixels)
-        .tilemapTop = 16,    // position from top (per 8 pixels)
-        .width = 30,        // width (per 8 pixels)
-        .height = 4,        // height (per 8 pixels)
-        .paletteNum = 14,   // palette index to use for text
-        .baseBlock = 484,     // tile start in VRAM
-    }, 
+        .bg = BG_TEXT,
+        .tilemapLeft = 1,   // x = 8
+        .tilemapTop = 3,    // y = 24
+        .width = 9,
+        .height = 2,
+        .paletteNum = 14,
+        .baseBlock = 66,    // 18 tiles
+    },
     DUMMY_WIN_TEMPLATE,
 }; 
 
@@ -157,22 +147,15 @@ static void Task_PokegearFadeIn(u8 taskId);
 static void Task_PokegearWaitForKeyPress(u8 taskId); 
 static void LoadPokegearBgGfx(void);
 static void SetUpPokegear_NormalField(void); 
-static void DrawPanels(void); 
 static void Task_PokegearFadeOut(u8 taskId); 
 static void FreeAndClosePokegear(u8 taskId); 
-static void PrintGUIMapName(void);
 static void CleanWindow(u8 windowId); 
 static void CommitWindow(u8 windowId); 
 static void CleanWindows(void); 
 static void CommitWindows(void); 
-static void PrintGUIMenuItemsName(void);
-static void DrawIcons(void);
 void Pokegear_Init(void); 
-static void CreateScrollbar(void) ;
-static void CalculateAndConfigureOnScreenOptions(void);
 static void Task_RunPokegearOptionFuncOrScript(u8 taskId);
-static void RefreshPokegearOptions(void);
-static void PrintAndUpdateTimeText();
+static void PrintPokegearBanner(void);
 static void ShowTownMap(void);
 static void ShowPhoneCard(void);
 static void ShowRadioCard(void);
@@ -188,30 +171,44 @@ static void DestroyPhoneCardPortrait(void);
 
 #define PHONECARD_MAX_VISIBLE 6
 
-static const struct PokegearOption sPokegearOptionsTable[] = 
+// One plate per option, in this order. `flag`: option is usable once this flag is set (0 = always).
+// A locked option stays on its plate, greyed out, and the cursor skips it.
+// The flags are set in PokegearSkins.h (POKEGEAR_FLAG_MAP / _RADIO / _PHONE).
+static const struct PokegearOption sPokegearOptionsTable[POKEGEAR_NUM_OPTIONS] = 
 {
+  [Pokegear_MAPCARD] =
   {
-    .id =  Pokegear_MAPCARD,
+    .id = Pokegear_MAPCARD,
     .text = (u8*) gText_Pokegear_MapCard,
-    .flag = 0,
+    .flag = POKEGEAR_FLAG_MAP,
     .script = NULL,
     .func = ShowTownMap
   },
-  {
-    .id = Pokegear_PHONECARD,
-    .text = (u8*) gText_Pokegear_PhoneCard,
-    .flag = 0,
-    .script = NULL,
-    .func = ShowPhoneCard
-  },
+  [Pokegear_RADIOCARD] =
   {
     .id = Pokegear_RADIOCARD,
     .text = (u8*) gText_Pokegear_RadioCard,
-    .flag = 0,
+    .flag = POKEGEAR_FLAG_RADIO,
     .script = NULL,
     .func = ShowRadioCard
   },
- }; 
+  [Pokegear_PHONECARD] =
+  {
+    .id = Pokegear_PHONECARD,
+    .text = (u8*) gText_Pokegear_PhoneCard,
+    .flag = POKEGEAR_FLAG_PHONE,
+    .script = NULL,
+    .func = ShowPhoneCard
+  },
+  [Pokegear_EXIT] =
+  {
+    .id = Pokegear_EXIT,
+    .text = (u8*) gText_Pokegear_Exit,
+    .flag = 0,
+    .script = NULL,
+    .func = NULL            // closes the Pokegear
+  },
+}; 
 
  enum {
   REGIONMAP_TYPE_NORMAL,
@@ -316,7 +313,7 @@ void CB2_Pokegear(void)
 			break;
 		case 5:
 	    Free(sPokegearPtr->sBgTilemapBuffer);
-			InitWindows(sMenuWindowTemplates);
+			InitWindows(sPokegearWindowTemplates);
 			DeactivateAllTextPrinters();
 			gMain.state++;
 			break;
@@ -337,129 +334,340 @@ void CB2_Pokegear(void)
 static void Task_PokegearFadeIn(u8 taskId)
 {
 	if (!gPaletteFade.active)
-	{
-			gTasks[taskId].func = Task_PokegearWaitForKeyPress;
-	}
+		gTasks[taskId].func = Task_PokegearWaitForKeyPress;
 }  
 
 static void LoadPokegearBgGfx(void)
 {
-	const u8 *tiles, *map;
-	const u16 *palette;
-  tiles = PokegearBgTiles; 
-  map = PokegearBgMap; 
-  palette = PokegearBgPal;
-	DecompressAndCopyTileDataToVram(BG_BACKGROUND, tiles, 0, 0, 0);
-	LZDecompressWram(map, sPokegearPtr->sBgTilemapBuffer);
-	LoadPalette(palette, 0, 0x20); 
-	palette = StdTextPal;
-	LoadPalette(palette, 14*16, 0x20);
+	DecompressAndCopyTileDataToVram(BG_BACKGROUND, PokegearBgTiles, 0, 0, 0);
+	LZDecompressWram(PokegearBgMap, sPokegearPtr->sBgTilemapBuffer);
+	LoadPalette(sPokegearSkinPal[sPokegearPtr->pgDesign], 0, 0x20);   // colours of the chosen design
+	LoadPalette(StdTextPal, 14*16, 0x20);
 } 
 
+// ---------------------------------------------------------------------------
+// Designs: the colours of the background are changed with palette updates
+// ---------------------------------------------------------------------------
+
+// mix two RGB555 colours, t = 0 (all `from`) .. 16 (all `to`)
+static u16 PgBlendColor(u16 from, u16 to, u8 t)
+{
+	u16 r = ((from & 0x1F) * (16 - t) + (to & 0x1F) * t) >> 4;
+	u16 g = (((from >> 5) & 0x1F) * (16 - t) + ((to >> 5) & 0x1F) * t) >> 4;
+	u16 b = (((from >> 10) & 0x1F) * (16 - t) + ((to >> 10) & 0x1F) * t) >> 4;
+
+	return r | (g << 5) | (b << 10);
+}
+
+// The design chosen on the main screen. The phone card and the radio card use the same colours.
+// (the main screen writes the choice to special var 0x8002 when a card is opened)
+static u8 PokegearGetDesign(void)
+{
+	u16 design;
+
+#if POKEGEAR_DESIGN_VAR
+	design = VarGet(POKEGEAR_DESIGN_VAR);
+#else
+	design = VarGet(0x8002);
+#endif
+	return (design < POKEGEAR_NUM_DESIGNS) ? design : 0;
+}
+
+// start a smooth colour change towards a design (also works in the middle of another one)
+static void PokegearStartDesignFade(u8 target)
+{
+	for (u8 i = 0; i < 16; i++)
+		sPokegearPtr->pgFromPal[i] = sPokegearPtr->pgCurPal[i];
+	sPokegearPtr->pgTarget = target;
+	sPokegearPtr->pgFadeStep = 1;
+#if POKEGEAR_DESIGN_VAR
+	VarSet(POKEGEAR_DESIGN_VAR, target);
+#endif
+}
+
+static void PokegearUpdateDesignFade(void)
+{
+	u8 step = sPokegearPtr->pgFadeStep;
+	u8 t;
+
+	if (step == 0)
+		return;
+	t = (step >= POKEGEAR_DESIGN_FADE_FRAMES) ? 16 : (step * 16) / POKEGEAR_DESIGN_FADE_FRAMES;
+	for (u8 i = 0; i < 16; i++)
+		sPokegearPtr->pgCurPal[i] = PgBlendColor(sPokegearPtr->pgFromPal[i], sPokegearSkinPal[sPokegearPtr->pgTarget][i], t);
+	LoadPalette(sPokegearPtr->pgCurPal, 0, 0x20);
+	if (step >= POKEGEAR_DESIGN_FADE_FRAMES)
+	{
+		sPokegearPtr->pgFadeStep = 0;
+		sPokegearPtr->pgDesign = sPokegearPtr->pgTarget;
+	}
+	else
+	{
+		sPokegearPtr->pgFadeStep = step + 1;
+	}
+}
+
+// grey copy of the icon palette (locked options)
+static void PgBuildLockedPalette(u16 *dst)
+{
+	for (u8 i = 0; i < 16; i++)
+	{
+		u16 c = pg_mapPal[i];
+		u16 l = ((((c & 0x1F) + ((c >> 5) & 0x1F) + ((c >> 10) & 0x1F)) / 3) * 2) / 3;
+
+		dst[i] = l | (l << 5) | (l << 10);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Sprite callbacks
+// ---------------------------------------------------------------------------
+
+// Affine matrix of a sprite. `size` is the size it is DRAWN at: 0x100 = normal, 0x200 = twice as big.
+// (The hardware matrix holds the inverse - a bigger number there would mean a SMALLER sprite -
+//  so the size is converted here and everything else just talks in sizes.)
+static void PgSetSpriteSize(struct Sprite *sprite, u16 size)
+{
+	s16 m = 0x10000 / size;
+
+	SetOamMatrixRotationScaling(sprite->oam.matrixNum, m, m, 0);
+}
+
+// give a sprite its own matrix and take it away from the animation engine
+static void PgInitAffineSprite(u8 spriteId, u16 size)
+{
+	InitSpriteAffineAnim(&gSprites[spriteId]);
+	gSprites[spriteId].affineAnimPaused = TRUE;     // we write the matrix ourselves
+	PgSetSpriteSize(&gSprites[spriteId], size);
+}
+
+static const u16 sPgIntroSize[] = {0x60, 0x80, 0xA0, 0xC0, 0xE0, 0xF4, 0x108, 0x110, 0x108, 0x100};  // "pop"
+static const u16 sPgIconPulse[16] = {0x100, 0x104, 0x108, 0x10C, 0x110, 0x114, 0x118, 0x118, 0x118, 0x114, 0x110, 0x10C, 0x108, 0x104, 0x100, 0x100};
+static const u16 sPgDotPulse[16]  = {0x150, 0x154, 0x158, 0x15C, 0x160, 0x164, 0x168, 0x168, 0x168, 0x164, 0x160, 0x15C, 0x158, 0x154, 0x150, 0x150};
+
+// Option icon: pops in one after the other, then the selected one shows its bright frame and "breathes".
+//   data[0] = option number   data[1] = age (negative = waiting to pop in)
+//   data[2] = last selected state   data[3] = pulse counter
+void PokegearIconCallback(struct Sprite *sprite) 
+{ 
+	u8 selected = (sprite->data[0] == cpos);
+
+	if (sprite->data[1] < 0)                        // waiting for its turn
+	{
+		sprite->data[1]++;
+		if (sprite->data[1] == 0)
+			sprite->invisible = FALSE;
+		return;
+	}
+	if (sprite->data[1] < (s16) ARRAY_COUNT(sPgIntroSize))     // pop-in
+	{
+		PgSetSpriteSize(sprite, sPgIntroSize[sprite->data[1]]);
+		sprite->data[1]++;
+		sprite->data[2] = 0xFF;                     // force an update when the pop-in is over
+		return;
+	}
+	if (sprite->data[2] != selected)
+	{
+		sprite->data[2] = selected;
+		sprite->data[3] = 0;
+		StartSpriteAnim(sprite, selected);          // frame 0 = normal, frame 1 = selected
+		if (!selected)
+			PgSetSpriteSize(sprite, 0x100);
+	}
+	if (selected)
+		PgSetSpriteSize(sprite, sPgIconPulse[(sprite->data[3]++ >> 1) & 15]);
+}
+
+// Glow under the selected plate: slides to the new plate and pulses.
+// The sprite is drawn in "blend" mode, so the hardware mixes it with the background;
+// the pulse is simply a changing BLDALPHA.
+static const u8 sGlowAlpha[16] = {5, 6, 7, 8, 9, 10, 11, 11, 10, 9, 8, 7, 6, 5, 5, 5};
+
+void PokegearGlowCallback(struct Sprite *sprite)
+{
+	s16 dx = sPgPlateX[cpos] - sprite->pos1.x;
+	u8 eva;
+
+	if (dx != 0)
+	{
+		s16 step = dx / 3;
+		if (step == 0)
+			step = (dx > 0) ? 1 : -1;
+		sprite->pos1.x += step;
+	}
+	sprite->data[0]++;
+	eva = sGlowAlpha[(sprite->data[0] >> 2) & 15];
+	SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(eva, 16 - eva));
+}
+
+// Design dot: the chosen design's dot is drawn bigger and pulses.
+//   data[0] = design number   data[2] = last state   data[3] = pulse counter
+void PokegearDotCallback(struct Sprite *sprite)
+{
+	u8 chosen = (sprite->data[0] == sPokegearPtr->pgTarget);
+
+	if (chosen)
+	{
+		PgSetSpriteSize(sprite, sPgDotPulse[(sprite->data[3]++ >> 1) & 15]);
+	}
+	else if (sprite->data[2] != chosen)
+	{
+		PgSetSpriteSize(sprite, 0x100);
+	}
+	sprite->data[2] = chosen;
+}
+
+// ---------------------------------------------------------------------------
+// Main screen
+// ---------------------------------------------------------------------------
 static bool8 InitPokegearGUI(void)
 { 
-  CleanWindows();
-  DrawPanels(); 
-  DrawIcons();
-  PrintGUIMapName(); 
-  PrintGUIMenuItemsName();
-  PrintAndUpdateTimeText();
-  CreateScrollbar();
-  CommitWindows();
-  return TRUE;
+	u16 pal[16];
+	u8 id;
+
+	CleanWindows();
+
+	// Alpha blending: sprites in "blend" mode (the glow) are mixed with BG3 / the backdrop.
+	SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT2_BG3 | BLDCNT_TGT2_BD);
+	SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(8, 8));
+
+	// sprite palettes: icons, greyed icons (locked options), glow, one per design dot
+	LoadSpritePalette(&(struct SpritePalette){pg_mapPal, GFXTAG_PG_ICON_PAL});
+	PgBuildLockedPalette(pal);
+	LoadSpritePalette(&(struct SpritePalette){pal, GFXTAG_PG_ICON_LOCKED});
+	LoadSpritePalette(&sPgGlowPalette);
+	for (u8 i = 0; i < POKEGEAR_NUM_DESIGNS; i++)
+	{
+		for (u8 j = 0; j < 16; j++)
+			pal[j] = 0;
+		pal[1] = sPokegearSkinDot[i];
+		pal[2] = PG_RGB(31, 31, 31);
+		LoadSpritePalette(&(struct SpritePalette){pal, GFXTAG_PG_DOT_PAL0 + i});
+	}
+
+	// one icon per plate (affine sprites)
+	for (u8 i = 0; i < POKEGEAR_NUM_OPTIONS; i++)
+	{
+		LoadSpriteSheet(&sPgIconSheets[i]);
+		id = CreateSprite(&sPgIconTemplates[i], sPgPlateX[i], PG_PLATE_Y, 0);
+		sPokegearPtr->pgIcon[i] = id;
+		if (id >= MAX_SPRITES)
+			continue;
+		PgInitAffineSprite(id, sPgIntroSize[0]);
+		gSprites[id].data[0] = i;
+		gSprites[id].data[1] = -4 * i;              // icons pop in one after the other
+		gSprites[id].data[2] = 0xFF;
+		gSprites[id].data[3] = 0;
+		if (i != 0)
+			gSprites[id].invisible = TRUE;
+		if (!(sPokegearPtr->pgUnlocked & (1 << i)))
+			gSprites[id].oam.paletteNum = IndexOfSpritePaletteTag(GFXTAG_PG_ICON_LOCKED);
+	}
+
+	// glow under the selected plate
+	LoadSpriteSheet(&sPgGlowSheet);
+	sPokegearPtr->pgGlow = CreateSprite(&sPgGlowTemplate, sPgPlateX[cpos], PG_GLOW_Y, 1);
+
+	// design dots (top left)
+	LoadSpriteSheet(&sPgDotSheet);
+	for (u8 i = 0; i < POKEGEAR_NUM_DESIGNS; i++)
+	{
+		id = CreateSprite(&sPgDotTemplates[i], PG_DOT_X0 + PG_DOT_DX * i, PG_DOT_Y, 0);
+		sPokegearPtr->pgDot[i] = id;
+		if (id >= MAX_SPRITES)
+			continue;
+		PgInitAffineSprite(id, 0x100);
+		gSprites[id].data[0] = i;
+		gSprites[id].data[2] = 0xFF;
+		gSprites[id].data[3] = 0;
+	}
+
+	WindowPrint(WIN_HINT, 0, 2, 2, &sWhiteText, 0, gText_Pokegear_DesignHint);
+	sPokegearPtr->pgLastMinute = 0xFF;      // forces the first draw of the banner
+	PrintPokegearBanner();
+	CommitWindows();
+	return TRUE;
 }
+
+// move the cursor to the next option that is not locked (left: -1, right: +1)
+static void PokegearMoveCursor(s8 dir)
+{
+	s8 pos = cpos;
+
+	for (;;)
+	{
+		pos += dir;
+		if (pos < 0 || pos >= POKEGEAR_NUM_OPTIONS)
+			return;                         // nothing selectable in that direction
+		if (sPokegearPtr->pgUnlocked & (1 << pos))
+			break;
+	}
+	PlaySE(SE_SELECT);
+	cpos = pos;
+}
+
 static void Task_PokegearWaitForKeyPress(u8 taskId)
 { 
-  // Handles Input
-  if (gClock.second==0)
-  {
-    CleanWindow(WIN_TOPBAR_TIME);
-    PrintAndUpdateTimeText();
-    CommitWindow(WIN_TOPBAR_TIME);
-  }
-  if (JOY_NEW(B_BUTTON)) 
-  { 
-    cpos = 0xFF;
-    PlaySE(SE_PC_OFF);
-    BeginNormalPaletteFade(0xFFFFFFFF, 0, 0, 16, RGB_BLACK);
+	PokegearUpdateDesignFade();
+	if (gClock.minute != sPokegearPtr->pgLastMinute || cpos != sPokegearPtr->pgLastCursor)
+		PrintPokegearBanner();
+
+	if (JOY_NEW(B_BUTTON) || (JOY_NEW(A_BUTTON) && cpos == Pokegear_EXIT)) 
+	{ 
+		PlaySE(SE_PC_OFF);
+		BeginNormalPaletteFade(0xFFFFFFFF, 0, 0, 16, RGB_BLACK);
 		gTasks[taskId].func = Task_PokegearFadeOut;
-  } 
-  else if(JOY_NEW(A_BUTTON))
-  {
-    PlaySE(SE_SELECT);
-    VarSet(0x8000, cpos);
-    VarSet(0x8001, scrolloffset);
-    BeginNormalPaletteFade(0xFFFFFFFF, 0, 0, 16, RGB_BLACK);
-    gTasks[taskId].func = Task_RunPokegearOptionFuncOrScript;
-  }
-  else if (JOY_NEW(DPAD_RIGHT)) 
-  {
-    if (!(cpos+1>= numonscreenitems) && !(cpos%2==1))
-    {
-      PlaySE(SE_SELECT);
-      cpos++; 
-    }
-  } 
-  else if (JOY_NEW(DPAD_LEFT))
-  {
-    if ((cpos-1>=0) && (cpos%2==1))
-    {
-      PlaySE(SE_SELECT);
-      cpos--;
-    }
-  } 
-  else if (JOY_NEW(DPAD_UP)) 
-  {
-    if (cpos>1 && cpos<4 && scrolloffset>0)
-    {
-      PlaySE(SE_SELECT);
-      scrolloffset -= 1; 
-      RefreshPokegearOptions();
-    }
-    else if (cpos-2>=0)  
-    {
-      PlaySE(SE_SELECT);
-      cpos -= 2; 
-    }
-
-  } 
-  else if (JOY_NEW(DPAD_DOWN)) 
-  {
-    if (cpos>1 && cpos<4 && scrolloffset<numitems/2-3+numitems%2)
-    {
-      scrolloffset += 1; 
-      PlaySE(SE_SELECT);
-      RefreshPokegearOptions();
-    }
-    else if (cpos+2<numonscreenitems)  
-   {
-      PlaySE(SE_SELECT);
-      cpos += 2; 
-   }
-  }
+	} 
+	else if (JOY_NEW(A_BUTTON))
+	{
+		PlaySE(SE_SELECT);
+		VarSet(0x8000, cpos);                           // so the cursor and the design are
+		VarSet(0x8002, sPokegearPtr->pgTarget);         // restored when we come back from the card
+		BeginNormalPaletteFade(0xFFFFFFFF, 0, 0, 16, RGB_BLACK);
+		gTasks[taskId].func = Task_RunPokegearOptionFuncOrScript;
+	}
+	else if (JOY_NEW(DPAD_RIGHT)) 
+	{
+		PokegearMoveCursor(1);
+	} 
+	else if (JOY_NEW(DPAD_LEFT))
+	{
+		PokegearMoveCursor(-1);
+	} 
+	else if (JOY_NEW(L_BUTTON))
+	{
+		PlaySE(SE_SELECT);
+		PokegearStartDesignFade((sPokegearPtr->pgTarget + POKEGEAR_NUM_DESIGNS - 1) % POKEGEAR_NUM_DESIGNS);
+	}
+	else if (JOY_NEW(R_BUTTON))
+	{
+		PlaySE(SE_SELECT);
+		PokegearStartDesignFade((sPokegearPtr->pgTarget + 1) % POKEGEAR_NUM_DESIGNS);
+	}
 } 
-
 
 static void Task_RunPokegearOptionFuncOrScript(u8 taskId)
 {
-  if (!gPaletteFade.active)
-  { 
-    if (sPokegearOptionsTable[onscreenmenuitems[cpos]].func!=NULL) 
-      SetMainCallback2(sPokegearOptionsTable[onscreenmenuitems[cpos]].func);
-    else
-    {
-      ScriptContext1_SetupScript(sPokegearOptionsTable[onscreenmenuitems[cpos]].script); 
-      SetMainCallback2(ReturnToFieldFromPokegear);
-    }
-    FreeAndClosePokegear(taskId);
-  }
+	if (!gPaletteFade.active)
+	{ 
+		const struct PokegearOption *option = &sPokegearOptionsTable[cpos];
+
+		if (option->func != NULL) 
+			SetMainCallback2(option->func);
+		else
+		{
+			ScriptContext1_SetupScript(option->script); 
+			SetMainCallback2(ReturnToFieldFromPokegear);
+		}
+		FreeAndClosePokegear(taskId);
+	}
 } 
 
 void Pokegear_Init(void)
 {
 	if (!gPaletteFade.active)
 	{
-	  ResetBgsAndClearDma3BusyFlags(0);
+		ResetBgsAndClearDma3BusyFlags(0);
 		gHelpSystemEnabled = FALSE;
 		CleanupOverworldWindowsAndTilemaps();
 		sPokegearPtr = Calloc(sizeof(struct PokegearResources));
@@ -468,112 +676,52 @@ void Pokegear_Init(void)
 	} 
 }
 
+// which options can be used, where the cursor starts and which design is shown
 static void SetUpPokegear_NormalField(void) 
 {
-  u8 cursor = 0;
-  for (u8 i = 0; i < MAX_Pokegear_ITEMS; i++)
-  { 
-    if (sPokegearOptionsTable[i].flag!=0 && !FlagGet(sPokegearOptionsTable[i].flag)) 
-      continue;
-    menuitems[cursor] = sPokegearOptionsTable[i].id;
-    cursor++;
-  } 
-  numitems = cursor; 
-  if (!scrolloffset)
-    scrolloffset = 0;
-  CalculateAndConfigureOnScreenOptions();
+	u8 mask = 0;
+	u8 design;
+
+	for (u8 i = 0; i < POKEGEAR_NUM_OPTIONS; i++)
+	{ 
+		u16 flag = sPokegearOptionsTable[i].flag;
+
+		if (flag == 0 || FlagGet(flag))
+			mask |= 1 << i;
+	} 
+	sPokegearPtr->pgUnlocked = mask;
+
+	if (cpos >= POKEGEAR_NUM_OPTIONS || !(mask & (1 << cpos)))
+	{
+		cpos = 0;
+		while (cpos < POKEGEAR_NUM_OPTIONS - 1 && !(mask & (1 << cpos)))
+			cpos++;
+	}
+
+	if (sPokegearPtr->pgFromCard)
+	{
+		design = sPokegearPtr->pgDesign;            // coming back from a card
+	}
+	else
+	{
+		design = 0;
+#if POKEGEAR_DESIGN_VAR
+		design = VarGet(POKEGEAR_DESIGN_VAR);
+#endif
+	}
+	if (design >= POKEGEAR_NUM_DESIGNS)
+		design = 0;
+	sPokegearPtr->pgDesign = design;
+	sPokegearPtr->pgTarget = design;
+	sPokegearPtr->pgFadeStep = 0;
+	for (u8 i = 0; i < 16; i++)
+		sPokegearPtr->pgCurPal[i] = sPokegearSkinPal[design][i];
 }
-
-
-void PanelCallBack(struct Sprite *sprite) 
-{
-  if (sprite->data[0]>=numonscreenitems && sprite->data[0]!=0xFF)
-    sprite->invisible = 1;
-  else 
-    sprite->invisible = 0;
-  if(sprite->data[0] == cpos) 
-    StartSpriteAnimIfDifferent(sprite, 1);
-  else 
-    StartSpriteAnimIfDifferent(sprite, 0);
-}
-
-void PokegearIconCallback(struct Sprite *sprite) 
-{ 
-  if(sprite->data[0] == cpos)
-  {
-    StartSpriteAnim(sprite, 1);
-    if (sprite->data[4]%5==0)
-    {
-      if(sprite->data[1]==0)
-        sprite->data[3] = 1;
-      else if(sprite->data[1]==3)
-        sprite->data[3] = -1;
-      sprite->data[1] += sprite->data[3];
-      sprite->pos1.y = sprite->data[2] + sprite->data[1]; 
-    }
-  sprite->data[4]++;
-  }
-  else 
-  {
-    sprite->pos1.y = sprite->data[2];
-    StartSpriteAnim(sprite, 0);
-  }
-}
-
-static void DrawPanels(void)
-{ 
-  u16 x, y;
-  u8 counter = 0; 
-  LoadSpriteSheet(&PanelSpriteSheet);
-  LoadSpritePalette(&PanelSpritePalette);
-  for (u8 j = 0; j<3; j++) 
-  {
-    for (u8 i = 0; i<2; i++) 
-    {
-      x = PANEL_X + (HSPACING + 64/2 + 62)*i;
-      y = (PANEL_Y + (VSPACING + 32)*j); 
-      u8 SpriteId1 = CreateSprite(&sPanel1SpriteTemplate,x, y, 0);
-      u8 SpriteId2 = CreateSprite(&sPanel2SpriteTemplate,x+64, y, 0); 
-      gSprites[SpriteId1].data[0] = counter;
-      gSprites[SpriteId2].data[0] = counter; 
-      counter++; 
-    }
-  }
-} 
-
-
-static void DrawIcons(void) 
-{
-  u16 x, y; 
-  x = 0;
-  y = 0;
-  u8 counter = 0;
-  for (u8 j = 0; j<3; j++) 
-  {
-    if(counter==numonscreenitems)
-        break; 
-    for (u8 i = 0; i<2; i++) 
-    {
-      if(counter==numonscreenitems)
-        break; 
-      x = (PANEL_X -11) + (HSPACING-2+ 64/2 + 64)*i;
-      y = (PANEL_Y-3)+ (VSPACING +32)*j; 
-      LoadSpriteSheet(&PokegearIconTable[onscreenmenuitems[counter]].spritesheet); 
-      LoadSpritePalette(&PokegearIconTable[onscreenmenuitems[counter]].spritepalette);
-      u8 SpriteId = CreateSprite(&PokegearIconTable[onscreenmenuitems[counter]].sprtemplate , x, y, 0);
-      gSprites[SpriteId].data[0] = counter;
-      gSprites[SpriteId].data[1] = 3;
-      gSprites[SpriteId].data[2] = y;
-      gSprites[SpriteId].data[3] = -1; 
-      sPokegearPtr->IconSpriteIds[counter] = SpriteId;
-      counter++; 
-    }
-  }
-}
-
 
 static void FreeAndClosePokegear(u8 taskId)
 {
+	SetGpuReg(REG_OFFSET_BLDCNT, 0);        // alpha blending off again
+	SetGpuReg(REG_OFFSET_BLDALPHA, 0);
 	Free(sPokegearPtr);
 	FreeAllWindowBuffers();
 	BGMVolumeMax_EnableHelpSystemReduction();
@@ -618,74 +766,14 @@ static void CommitWindows(void)
 		CommitWindow(i);
 }
 
-static void PrintGUIMapName(void)
-{ 
-  	GetMapName(gStringVar4, GetCurrentRegionMapSectionId(), 0); 
-  	WindowPrint(WIN_BOTTOMBAR, 0, 2, 13, &sWhiteText, 0, gStringVar4); 
-}
-
-static void PrintGUIMenuItemsName(void) 
-{ 
-  u16 x, y;
-  x = 0; 
-  y = 0; 
-  u8 counter = 0;
-  for (u8 row = 0;row<3; row++)
-  { 
-    if (counter==numonscreenitems) 
-      break;
-    for (u8 column = 0; column<2; column++) 
-    {
-      if (counter==numonscreenitems) 
-        break; 
-      x = (PANEL_X + (HSPACING + 64/2 + 64)*column) + 8;
-      y = (PANEL_Y + (VSPACING + 32)*row) - 40;
-        WindowPrint(WIN_ITEMS, 1, x, y, &sWhiteText, 0, sPokegearOptionsTable[onscreenmenuitems[counter]].text); 
-      counter++;
-    }
-  }
-} 
-
 void CB2_ReturnToFieldWithOpenMenu(void)
 { 
-  sPokegearPtr = Calloc(sizeof(struct PokegearResources));
-  cpos = VarGet(0x8000); 
-  scrolloffset = VarGet(0x8001);
-  SetMainCallback2(CB2_Pokegear);
+	sPokegearPtr = Calloc(sizeof(struct PokegearResources));
+	cpos = VarGet(0x8000); 
+	sPokegearPtr->pgDesign = VarGet(0x8002);        // design that was chosen before opening the card
+	sPokegearPtr->pgFromCard = TRUE;
+	SetMainCallback2(CB2_Pokegear);
 } 
-
-
-static void CalculateAndConfigureOnScreenOptions(void) 
-{
-  u8 counter = 0;
-  for (u8 i = 0; i<6; i++)
-  {
-    if (i+2*scrolloffset == numitems)
-      break;
-    onscreenmenuitems[i] = menuitems[i+scrolloffset*2];
-    counter++;
-  } 
-  numonscreenitems = counter;
-}
-
-
-static void RefreshPokegearOptions(void) 
-{
-  CleanWindow(WIN_ITEMS);
-  for (u8 i=0; i<numonscreenitems; i++) 
-    DestroySpriteAndFreeResources(&gSprites[sPokegearPtr->IconSpriteIds[i]]);
-  CalculateAndConfigureOnScreenOptions();
-  DrawIcons();
-  PrintGUIMenuItemsName();
-  CommitWindow(WIN_ITEMS);
-} 
-static void CreateScrollbar(void) 
-{
-  LoadSpriteSheet(&ScrollBarSpriteSheet);
-  LoadSpritePalette(&ScrollBarSpritePalette); 
-  CreateSprite(&ScrollBarSpriteTemplate, 240-5, 48, 0);
-
-}
 
 extern const u8 gText_PhoneCard_HintList[];
 extern const u8 gText_PhoneCard_Idle[];
@@ -808,16 +896,30 @@ const u8 * sDayNames[] =
 
 extern u8 gText_Pokegear_TimeBase_12Hr[];
 
-static void PrintAndUpdateTimeText()
+// Banner plate: clock on the first line, name of the selected option on the second (both centred)
+static void PrintPokegearBanner(void)
 {
 	const u8* amPMString = (gClock.hour >= 12) ? gText_PM : gText_AM;
+	const u8* name = sPokegearOptionsTable[cpos].text;
+	s32 w1, w2, x;
+
 	ConvertIntToDecimalStringN(gStringVar1, (gClock.hour == 0) ? 12 : (gClock.hour > 12) ? gClock.hour - 12 : gClock.hour, STR_CONV_MODE_RIGHT_ALIGN, 2); //Hour - 12hr format
 	ConvertIntToDecimalStringN(gStringVar2, gClock.minute, STR_CONV_MODE_LEADING_ZEROS, 2); //Minute
 	StringCopy(gStringVar3, sDayNames[gClock.dayOfWeek]); //Day of Week
 	StringExpandPlaceholders(gStringVar4, gText_Pokegear_TimeBase_12Hr);
-//	AddTextPrinterParameterized(sTimeWindowId, 2, gStringVar4, 4, 3, 0xFF, NULL);
-  WindowPrint(WIN_TOPBAR_TIME, 0, 3, 0, &sWhiteText, 0 ,gStringVar4);
-  WindowPrint(WIN_TOPBAR_TIME, 0, 63, 0, &sWhiteText, 0 ,amPMString);
+
+	CleanWindow(WIN_BANNER);
+	w1 = GetStringWidth(0, gStringVar4, 0);
+	w2 = GetStringWidth(0, amPMString, 0);
+	x = (PG_BANNER_W - (w1 + w2)) / 2;
+	WindowPrint(WIN_BANNER, 0, x, PG_BANNER_Y1, &sWhiteText, 0, gStringVar4);
+	WindowPrint(WIN_BANNER, 0, x + w1, PG_BANNER_Y1, &sWhiteText, 0, amPMString);
+	x = (PG_BANNER_W - GetStringWidth(0, name, 0)) / 2;
+	WindowPrint(WIN_BANNER, 0, x, PG_BANNER_Y2, &sWhiteText, 0, name);
+	CommitWindow(WIN_BANNER);
+
+	sPokegearPtr->pgLastMinute = gClock.minute;
+	sPokegearPtr->pgLastCursor = cpos;
 }
 static void ShowPhoneCard(void)
 {
@@ -887,7 +989,7 @@ static void LoadPhoneCardBgGfx(void)
 {
     DecompressAndCopyTileDataToVram(BG_BACKGROUND, PhoneCardBgTiles, 0, 0, 0);
     LZDecompressWram(PhoneCardBgMap, sPokegearPtr->sBgTilemapBuffer);
-    LoadPalette(PhoneCardBgPal, 0, 0x20);
+    LoadPalette(sPhoneCardSkinPal[PokegearGetDesign()], 0, 0x20);   // colours of the chosen design
     LoadPalette(StdTextPal, 14 * 16, 0x20); // text palette used by every window
 }
 
@@ -1626,7 +1728,7 @@ static void LoadRadioCardBgGfx(void)
 {
     DecompressAndCopyTileDataToVram(BG_BACKGROUND, RadioCardBgTiles, 0, 0, 0);
     LZDecompressWram(RadioCardBgMap, sPokegearPtr->sBgTilemapBuffer);
-    LoadPalette(RadioCardBgPal, 0, 0x20);
+    LoadPalette(sRadioCardSkinPal[PokegearGetDesign()], 0, 0x20);   // colours of the chosen design
     LoadPalette(StdTextPal, 14 * 16, 0x20); // text palette used by every window
 }
 

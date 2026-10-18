@@ -8,12 +8,6 @@
 #include "../include/text.h"
 #include "graphics.h"
 
-#define PANEL_X 34
-#define PANEL_Y 41 
-#define HSPACING 20
-#define VSPACING 6
-#define icon_template(gfxtag) {.tileTag = (u16) gfxtag, .paletteTag = (u16) gfxtag, .oam = &sIconOamData, .anims = sAnimCmdTable_Icon, .images = NULL,.affineAnims = gDummySpriteAffineAnimTable, .callback = PokegearIconCallback}
-
 // Overworld sprite table access (symbols come from BPRE.ld)
 extern const struct EventObjectGraphicsInfo* GetEventObjectGraphicsInfoOriginal(u16 graphicsId);
 extern void MakeObjectTemplateFromEventObjectGraphicsInfo(u16 graphicsId, void (*callback)(struct Sprite *), struct SpriteTemplate *spriteTemplate, const struct SubspriteTable **subspriteTables);
@@ -35,16 +29,11 @@ enum BGs
 enum PokegearOptions
 {
   Pokegear_MAPCARD = 0,
-  Pokegear_PHONECARD,
   Pokegear_RADIOCARD,
+  Pokegear_PHONECARD,
+  Pokegear_EXIT,
+  POKEGEAR_NUM_OPTIONS
 };
-
-struct PokegearIcon
-{
-  const struct SpriteSheet spritesheet;
-  const struct SpritePalette spritepalette;
-  const struct SpriteTemplate sprtemplate;
-}; 
 
 struct PokegearOption 
 {
@@ -59,6 +48,8 @@ struct PokegearOption
 extern const u8 gText_Pokegear_MapCard[];
 extern const u8 gText_Pokegear_PhoneCard[];
 extern const u8 gText_Pokegear_RadioCard[];
+extern const u8 gText_Pokegear_Exit[];
+extern const u8 gText_Pokegear_DesignHint[];
 extern void m4aSongNumStop(u16 n);
 
 //Time strings
@@ -115,28 +106,6 @@ static const struct BgTemplate sPokegearBgTemplates[] =
 	}, 
 }; 
 
-
-static struct PokegearIcon PokegearIconTable[] = 
-{
-  [Pokegear_MAPCARD] = 
-  {
-    .spritesheet = {TownMapTiles, 32*32, GFXTAG_MAPCARD},
-    .spritepalette =  {TownMapPal, GFXTAG_MAPCARD},
-    .sprtemplate = icon_template(GFXTAG_MAPCARD)
-  },
-  [Pokegear_PHONECARD] = 
-  {
-    .spritesheet = {phonecardTiles, 32*32, GFXTAG_PHONECARD},
-    .spritepalette =  {phonecardPal, GFXTAG_PHONECARD},
-    .sprtemplate = icon_template(GFXTAG_PHONECARD)
-  },
-  [Pokegear_RADIOCARD] = 
-  {
-    .spritesheet = {radiocardTiles, 32*32, GFXTAG_RADIOCARD},
-    .spritepalette =  {radiocardPal, GFXTAG_RADIOCARD},
-    .sprtemplate = icon_template(GFXTAG_RADIOCARD)
-  },
-};
 
 // Text fonts
 static const struct TextColor sWhiteText =
