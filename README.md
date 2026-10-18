@@ -20,6 +20,9 @@ Credits to Shiny Miner(creator), ansh(BW Start menu as base), Dr. Seuss for Poke
 
 build is same as CFRU. If you don't know how, then checkout how, idc.
 
+## In case of using BW start menu
+You need to remove both lines from functionrewrites file (make it empty)
+
 ## 1. Player controls
 
 • Left / Right: move between plates. Locked plates are skipped.
