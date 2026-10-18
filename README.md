@@ -1,8 +1,20 @@
 # Custom HGSS PokeGear by Shiny Miner
 
+## Support and doubts : https://discord.gg/zqphPZSzhn
+
 A HGSS-style Pokégear for a FireRed (BPRE) ROM, It has four plates (Map, Radio, Phone, Exit), six colour designs and its own phone and radio cards.
 
 Credits to Shiny Miner(creator), ansh(BW Start menu as base)
+
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/9a022c01-2b43-4899-b8ab-8e2202b97dc1" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/9ec26165-e846-4918-b638-9ef5de48d34e" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/2a64e220-6d1f-48af-b76b-6a08f117417c" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/a25e52f9-0092-4400-8bb8-14b52f4b7e39" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/3d9345bb-eff9-4b78-9ed9-d23c9bd4b7b6" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/0c974830-9587-4f22-9719-9c8a6531d5c7" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/39bec034-08b2-42a2-850e-6dbeac1137c5" />
+
+
 
 ## Build
 
