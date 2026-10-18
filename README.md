@@ -4,7 +4,7 @@
 
 A HGSS-style Pokégear for a FireRed (BPRE) ROM, It has four plates (Map, Radio, Phone, Exit), six colour designs and its own phone and radio cards.
 
-Credits to Shiny Miner(creator), ansh(BW Start menu as base)
+Credits to Shiny Miner(creator), ansh(BW Start menu as base), Dr. Seuss for Pokegear BG
 
 <img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/9a022c01-2b43-4899-b8ab-8e2202b97dc1" />
 <img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/9ec26165-e846-4918-b638-9ef5de48d34e" />
